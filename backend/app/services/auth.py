@@ -8,10 +8,10 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.core.security import decode_access_token, get_password_hash, verify_password
+from app.core.security import create_access_token, decode_access_token, get_password_hash, verify_password
 from app.models.user import User
 from app.schemas.user import LoginRequest, LoginResponse, UserResponse
-from app.services.token_blacklist import is_token_revoked
+from app.services.token_blacklist import is_token_valid_for_user
 
 # HTTP Bearer 认证
 security = HTTPBearer()
@@ -34,14 +34,6 @@ async def get_current_user(
 ) -> User:
     """获取当前用户"""
     token = credentials.credentials
-
-    # 检查令牌是否被吊销
-    if await is_token_revoked(db, token):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="令牌已被吊销",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
 
     payload = decode_access_token(token)
     if payload is None:
@@ -83,6 +75,14 @@ async def get_current_user(
             detail="用户已被禁用",
         )
 
+    # 检查令牌是否有效（考虑密码修改时间）
+    if not await is_token_valid_for_user(db, token, user.id, user.password_changed_at):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="令牌已失效（密码已修改）",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
     return user
 
 
@@ -109,8 +109,6 @@ async def login(db: AsyncSession, login_data: LoginRequest) -> LoginResponse:
             detail="用户名或密码错误",
             headers={"WWW-Authenticate": "Bearer"},
         )
-
-    from app.core.security import create_access_token
 
     # JWT 的 sub 字段必须是字符串
     access_token = create_access_token(data={"sub": str(user.id)})

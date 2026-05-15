@@ -6,6 +6,7 @@ from app.models.workflow import Workflow, WorkflowLog
 from app.models.inventory import InventoryRecord, InventoryAlert
 from app.models.inspection import InspectionPlan, InspectionRecord
 from app.models.token_blacklist import TokenBlacklist
+from app.models.scan_log import ScanLog
 
 __all__ = [
     "User",
@@ -18,4 +19,5 @@ __all__ = [
     "InspectionPlan",
     "InspectionRecord",
     "TokenBlacklist",
+    "ScanLog",
 ]

@@ -21,6 +21,35 @@
 
 ---
 
+## 已知限制
+
+### 速率限制
+
+- **当前实现**：基于内存（`collections.defaultdict`）
+- **限制**：仅适用于单实例部署，多实例部署时速率限制不共享
+- **重启丢失**：服务器重启后速率限制计数器清零
+- **生产建议**：多实例部署需要集成 Redis 实现持久化速率限制
+
+### 数据库
+
+- **开发环境**：使用 SQLite，与生产环境 PostgreSQL 存在行为差异
+- **测试覆盖**：单元测试在 SQLite 上运行，未在 PostgreSQL 上验证
+- **生产建议**：上线前必须在 PostgreSQL 环境测试
+
+### 令牌管理
+
+- **密码修改**：修改密码后旧令牌立即失效（基于 `password_changed_at` 字段）
+- **令牌吊销**：支持黑名单机制，但高频检查时增加数据库压力
+- **生产建议**：考虑将黑名单迁移到 Redis
+
+### 中间件
+
+- **实现方式**：使用 `BaseHTTPMiddleware`
+- **限制**：不支持流式响应和 WebSocket
+- **适用场景**：当前仅用于速率限制，不影响核心功能
+
+---
+
 ## 功能模块
 
 ### ✅ 已完成（后端 API）
@@ -33,9 +62,9 @@
 | 库存管理 | 出入库、预警、聚合查询 | ✅ 完成 | 8 passed |
 | 巡检管理 | 计划、记录、逾期检测 | ✅ 完成 | 8 passed |
 | 仪表盘 | 统计概览、最近操作 | ✅ 完成 | 2 passed |
-| 扫码功能 | 扫码查询、二维码生成 | ✅ 完成 | - |
+| 扫码功能 | 扫码查询、二维码生成、扫码日志 | ✅ 完成 | 5 passed |
 
-**测试总计：57 passed, 0 failed**
+**测试总计：62 passed, 0 failed**
 
 ### ⚠️ 进行中（前端页面）
 
@@ -300,6 +329,15 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 4
 ```
 需求澄清 → 计划制定 → 计划审查 → 切片实施 → 代码审查 → 深度审查 → 优化迭代
 ```
+
+### 架构决策记录 (ADR)
+
+关键架构决策已记录在 [docs/adr/](docs/adr/) 目录：
+
+- [ADR-001](docs/adr/001-choose-fastapi.md): 选择 FastAPI 作为 Web 框架
+- [ADR-002](docs/adr/002-use-sqlite-for-dev.md): 开发环境使用 SQLite
+- [ADR-003](docs/adr/003-use-jwt-auth.md): 选择 JWT 作为认证方案
+- [ADR-004](docs/adr/004-use-gateflow-workflow.md): 选择 Gateflow 工作流模式
 
 ### 已完成的 Gate
 

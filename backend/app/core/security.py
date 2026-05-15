@@ -1,5 +1,6 @@
 """安全模块 - JWT 和密码哈希"""
 
+import logging
 from datetime import datetime, timedelta
 from typing import Optional
 
@@ -7,6 +8,9 @@ from jose import JWTError, jwt
 from passlib.context import CryptContext
 
 from app.core.config import settings
+
+# 配置日志
+logger = logging.getLogger(__name__)
 
 # 密码哈希上下文
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -45,7 +49,5 @@ def decode_access_token(token: str) -> Optional[dict]:
         )
         return payload
     except JWTError as e:
-        # 使用 logging 而非 print
-        import logging
-        logging.warning(f"JWT decode error: {e}")
+        logger.warning(f"JWT decode error: {e}")
         return None

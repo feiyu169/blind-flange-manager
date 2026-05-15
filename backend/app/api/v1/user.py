@@ -95,7 +95,7 @@ async def change_password(
     db: AsyncSession = Depends(get_db),
 ):
     """修改密码"""
-    from app.core.security import verify_password
+    from datetime import datetime
 
     if not verify_password(password_data.old_password, current_user.password_hash):
         raise HTTPException(
@@ -103,7 +103,9 @@ async def change_password(
             detail="旧密码错误",
         )
 
+    # 更新密码和密码修改时间
     current_user.password_hash = get_password_hash(password_data.new_password)
+    current_user.password_changed_at = datetime.utcnow()
     await db.flush()
 
     return {"message": "密码修改成功"}
