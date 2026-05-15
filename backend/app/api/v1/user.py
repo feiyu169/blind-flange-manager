@@ -32,6 +32,38 @@ async def user_login(
     return await login(db, login_data)
 
 
+@router.post("/init-admin", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
+async def init_admin(
+    user_data: UserCreate,
+    db: AsyncSession = Depends(get_db),
+):
+    """初始化管理员用户（仅当没有用户时可用）"""
+    # 检查是否已有用户
+    result = await db.execute(select(func.count()).select_from(User))
+    count = result.scalar()
+    if count > 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="系统已有用户，无法使用初始化接口",
+        )
+
+    # 创建管理员用户
+    user = User(
+        username=user_data.username,
+        password_hash=get_password_hash(user_data.password),
+        real_name=user_data.real_name or "管理员",
+        role="admin",
+        phone=user_data.phone,
+        email=user_data.email,
+    )
+
+    db.add(user)
+    await db.flush()
+    await db.refresh(user)
+
+    return UserResponse.model_validate(user)
+
+
 @router.get("/me", response_model=UserResponse)
 async def get_me(
     current_user: User = Depends(get_current_user),
