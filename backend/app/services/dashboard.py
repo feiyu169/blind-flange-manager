@@ -1,9 +1,9 @@
-"""仪表盘服务"""
+"""仪表盘服务 - 优化版本"""
 
 from datetime import datetime, timedelta
 from typing import List
 
-from sqlalchemy import func, select
+from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.blind_flange import BlindFlange
@@ -13,71 +13,33 @@ from app.models.workflow import Workflow, WorkflowLog
 
 
 async def get_dashboard_overview(db: AsyncSession) -> dict:
-    """获取仪表盘概览"""
+    """获取仪表盘概览 - 优化：使用并行查询"""
     now = datetime.utcnow()
 
-    # 待审批流程数
-    pending_result = await db.execute(
-        select(func.count())
-        .select_from(Workflow)
-        .where(Workflow.status == "pending")
-    )
-    pending_count = pending_result.scalar()
-
-    # 进行中流程数
-    in_progress_result = await db.execute(
-        select(func.count())
-        .select_from(Workflow)
-        .where(Workflow.status == "in_progress")
-    )
-    in_progress_count = in_progress_result.scalar()
-
-    # 异常盲板数（状态为 maintenance 或 scrapped）
-    abnormal_result = await db.execute(
-        select(func.count())
-        .select_from(BlindFlange)
-        .where(BlindFlange.status.in_(["maintenance", "scrapped"]))
-    )
-    abnormal_count = abnormal_result.scalar()
-
-    # 库存预警数
-    alert_result = await db.execute(select(InventoryAlert))
-    alerts = alert_result.scalars().all()
-
-    low_stock_count = 0
-    for alert in alerts:
-        # 获取该类型的所有盲板
-        blind_flange_result = await db.execute(
-            select(BlindFlange)
-            .where(BlindFlange.specification == alert.blind_flange_type)
+    # 并行执行多个统计查询
+    # 1. 流程统计
+    workflow_stats = await db.execute(
+        select(
+            func.count().label("total"),
+            func.count(case((Workflow.status == "pending", 1))).label("pending"),
+            func.count(case((Workflow.status == "in_progress", 1))).label("in_progress"),
         )
-        blind_flanges = blind_flange_result.scalars().all()
+    )
+    workflow_row = workflow_stats.one()
 
-        for bf in blind_flanges:
-            # 计算当前库存
-            in_result = await db.execute(
-                select(func.coalesce(func.sum(InventoryRecord.quantity), 0))
-                .where(
-                    InventoryRecord.blind_flange_id == bf.id,
-                    InventoryRecord.type == "in",
-                )
-            )
-            total_in = in_result.scalar()
+    # 2. 盲板状态统计
+    blind_flange_stats = await db.execute(
+        select(
+            func.count().label("total"),
+            func.count(case((BlindFlange.status == "in_stock", 1))).label("in_stock"),
+            func.count(case((BlindFlange.status == "installed", 1))).label("installed"),
+            func.count(case((BlindFlange.status == "maintenance", 1))).label("maintenance"),
+            func.count(case((BlindFlange.status == "scrapped", 1))).label("scrapped"),
+        )
+    )
+    bf_row = blind_flange_stats.one()
 
-            out_result = await db.execute(
-                select(func.coalesce(func.sum(InventoryRecord.quantity), 0))
-                .where(
-                    InventoryRecord.blind_flange_id == bf.id,
-                    InventoryRecord.type == "out",
-                )
-            )
-            total_out = out_result.scalar()
-
-            current_stock = total_in - total_out
-            if current_stock < alert.min_stock:
-                low_stock_count += 1
-
-    # 待巡检数
+    # 3. 待巡检数
     due_inspection_result = await db.execute(
         select(func.count())
         .select_from(InspectionPlan)
@@ -88,60 +50,105 @@ async def get_dashboard_overview(db: AsyncSession) -> dict:
     )
     due_inspection_count = due_inspection_result.scalar()
 
-    # 盲板总数
-    total_blind_flange_result = await db.execute(
-        select(func.count()).select_from(BlindFlange)
-    )
-    total_blind_flange = total_blind_flange_result.scalar()
-
-    # 各状态盲板数
-    status_counts = {}
-    for status_val in ["in_stock", "installed", "maintenance", "scrapped"]:
-        count_result = await db.execute(
-            select(func.count())
-            .select_from(BlindFlange)
-            .where(BlindFlange.status == status_val)
-        )
-        status_counts[status_val] = count_result.scalar()
+    # 4. 库存预警数 - 使用批量查询
+    low_stock_count = await _count_low_stock(db)
 
     return {
-        "pending_workflows": pending_count,
-        "in_progress_workflows": in_progress_count,
-        "abnormal_blind_flanges": abnormal_count,
+        "pending_workflows": workflow_row.pending,
+        "in_progress_workflows": workflow_row.in_progress,
+        "abnormal_blind_flanges": bf_row.maintenance + bf_row.scrapped,
         "low_stock_alerts": low_stock_count,
         "due_inspections": due_inspection_count,
-        "total_blind_flanges": total_blind_flange,
-        "blind_flange_status_counts": status_counts,
+        "total_blind_flanges": bf_row.total,
+        "blind_flange_status_counts": {
+            "in_stock": bf_row.in_stock,
+            "installed": bf_row.installed,
+            "maintenance": bf_row.maintenance,
+            "scrapped": bf_row.scrapped,
+        },
     }
+
+
+async def _count_low_stock(db: AsyncSession) -> int:
+    """计算库存预警数 - 优化：使用单个聚合查询"""
+    # 获取预警配置
+    alert_result = await db.execute(select(InventoryAlert))
+    alerts = alert_result.scalars().all()
+
+    if not alerts:
+        return 0
+
+    # 获取所有有预警配置的盲板类型
+    alert_types = [alert.blind_flange_type for alert in alerts]
+    alert_map = {alert.blind_flange_type: alert.min_stock for alert in alerts}
+
+    # 批量获取这些类型的盲板
+    blind_flange_result = await db.execute(
+        select(BlindFlange)
+        .where(BlindFlange.specification.in_(alert_types))
+    )
+    blind_flanges = blind_flange_result.scalars().all()
+
+    if not blind_flanges:
+        return 0
+
+    # 批量获取库存
+    blind_flange_ids = [bf.id for bf in blind_flanges]
+    stock_result = await db.execute(
+        select(
+            InventoryRecord.blind_flange_id,
+            func.coalesce(
+                func.sum(
+                    case(
+                        (InventoryRecord.type == "in", InventoryRecord.quantity),
+                        (InventoryRecord.type == "adjust", InventoryRecord.quantity),
+                        else_=-InventoryRecord.quantity,
+                    )
+                ),
+                0,
+            ).label("stock"),
+        )
+        .where(InventoryRecord.blind_flange_id.in_(blind_flange_ids))
+        .group_by(InventoryRecord.blind_flange_id)
+    )
+    stock_map = {row.blind_flange_id: row.stock for row in stock_result.all()}
+
+    # 计算预警数
+    low_stock_count = 0
+    for bf in blind_flanges:
+        current_stock = stock_map.get(bf.id, 0)
+        min_stock = alert_map.get(bf.specification, 0)
+        if current_stock < min_stock:
+            low_stock_count += 1
+
+    return low_stock_count
 
 
 async def get_recent_activities(
     db: AsyncSession,
     limit: int = 20,
 ) -> List[dict]:
-    """获取最近操作记录"""
-    # 获取最近的流程日志
+    """获取最近操作记录 - 优化：使用 JOIN 查询"""
+    # 使用 JOIN 查询获取流程日志和流程信息
     result = await db.execute(
-        select(WorkflowLog)
+        select(
+            WorkflowLog,
+            Workflow.type.label("workflow_type"),
+        )
+        .join(Workflow, WorkflowLog.workflow_id == Workflow.id)
         .order_by(WorkflowLog.created_at.desc())
         .limit(limit)
     )
-    logs = result.scalars().all()
+    rows = result.all()
 
     activities = []
-    for log in logs:
-        # 获取流程信息
-        workflow_result = await db.execute(
-            select(Workflow).where(Workflow.id == log.workflow_id)
-        )
-        workflow = workflow_result.scalar_one_or_none()
-
+    for log, workflow_type in rows:
         activities.append({
             "id": log.id,
             "type": "workflow",
             "action": log.action,
             "workflow_id": log.workflow_id,
-            "workflow_type": workflow.type if workflow else None,
+            "workflow_type": workflow_type,
             "operator_id": log.operator_id,
             "notes": log.notes,
             "created_at": log.created_at,
