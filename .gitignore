@@ -17,7 +17,7 @@ build/
 *.swp
 *.swo
 
-# Environment
+# Environment - 安全处理
 .env
 .env.local
 .env.*.local
@@ -56,3 +56,6 @@ coverage.xml
 
 # MyPy
 .mypy_cache/
+
+# Alembic
+alembic/versions/*.pyc

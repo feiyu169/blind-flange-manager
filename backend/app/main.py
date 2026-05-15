@@ -7,15 +7,15 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
-from app.core.database import engine, init_db
+from app.core.database import engine
 from app.core.rate_limit import RateLimitMiddleware
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """应用生命周期管理"""
-    # 启动时初始化数据库
-    await init_db()
+    # 启动时 - 不再自动创建表，使用 Alembic 迁移
+    # 运行: alembic upgrade head
     yield
     # 关闭时
     await engine.dispose()
