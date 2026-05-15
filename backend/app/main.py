@@ -48,13 +48,14 @@ from app.api.v1.blind_flange import router as blind_flange_router
 from app.api.v1.scan import router as scan_router
 from app.api.v1.workflow import router as workflow_router
 from app.api.v1.inventory import router as inventory_router
+from app.api.v1.inspection import router as inspection_router
 
 app.include_router(user_router, prefix="/api/v1/users", tags=["用户管理"])
 app.include_router(blind_flange_router, prefix="/api/v1/blind-flanges", tags=["盲板管理"])
 app.include_router(scan_router, prefix="/api/v1/scan", tags=["扫码"])
 app.include_router(workflow_router, prefix="/api/v1/workflows", tags=["流程管理"])
 app.include_router(inventory_router, prefix="/api/v1/inventory", tags=["库存管理"])
+app.include_router(inspection_router, prefix="/api/v1/inspections", tags=["巡检"])
 
 # 后续添加
 # app.include_router(dashboard_router, prefix="/api/v1/dashboard", tags=["仪表盘"])
-# app.include_router(inspection_router, prefix="/api/v1/inspections", tags=["巡检"])
