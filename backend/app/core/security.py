@@ -37,8 +37,15 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
 def decode_access_token(token: str) -> Optional[dict]:
     """解码访问令牌"""
     try:
-        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        payload = jwt.decode(
+            token,
+            settings.SECRET_KEY,
+            algorithms=[settings.ALGORITHM],
+            options={"verify_exp": True},
+        )
         return payload
     except JWTError as e:
-        print(f"JWT decode error: {e}")
+        # 使用 logging 而非 print
+        import logging
+        logging.warning(f"JWT decode error: {e}")
         return None
