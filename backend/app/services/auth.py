@@ -11,6 +11,7 @@ from app.core.database import get_db
 from app.core.security import decode_access_token, get_password_hash, verify_password
 from app.models.user import User
 from app.schemas.user import LoginRequest, LoginResponse, UserResponse
+from app.services.token_blacklist import is_token_revoked
 
 # HTTP Bearer 认证
 security = HTTPBearer()
@@ -33,6 +34,15 @@ async def get_current_user(
 ) -> User:
     """获取当前用户"""
     token = credentials.credentials
+
+    # 检查令牌是否被吊销
+    if await is_token_revoked(db, token):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="令牌已被吊销",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
     payload = decode_access_token(token)
     if payload is None:
         raise HTTPException(
