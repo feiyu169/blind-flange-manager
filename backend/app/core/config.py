@@ -18,8 +18,8 @@ class Settings(BaseSettings):
     # Redis 配置
     REDIS_URL: str = "redis://localhost:6379/0"
 
-    # JWT 配置
-    SECRET_KEY: str = "your-secret-key-change-in-production"
+    # JWT 配置 - 必须从环境变量读取，不提供默认值
+    SECRET_KEY: str
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 480  # 8 小时
 

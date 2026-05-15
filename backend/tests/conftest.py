@@ -1,6 +1,7 @@
 """测试配置"""
 
 import asyncio
+import os
 from typing import AsyncGenerator, Generator
 
 import pytest
@@ -8,6 +9,10 @@ import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
+
+# 设置测试环境变量
+os.environ["SECRET_KEY"] = "test-secret-key-for-testing"
+os.environ["DATABASE_URL"] = "sqlite+aiosqlite:///./test.db"
 
 from app.core.database import Base, get_db
 from app.core.security import create_access_token, get_password_hash
