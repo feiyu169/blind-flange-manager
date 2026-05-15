@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import DateTime, Integer, String, Text, func
+from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -16,10 +16,10 @@ class Workflow(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     type: Mapped[str] = mapped_column(String(20), nullable=False, index=True)  # install/uninstall/inspect
-    blind_flange_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    blind_flange_id: Mapped[int] = mapped_column(Integer, ForeignKey("blind_flanges.id"), nullable=False, index=True)
     status: Mapped[str] = mapped_column(String(20), default="pending", index=True)
-    applicant_id: Mapped[int] = mapped_column(Integer, nullable=False)
-    approver_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    applicant_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False)
+    approver_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("users.id"), nullable=True)
     applied_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     approved_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     started_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
@@ -39,9 +39,9 @@ class WorkflowLog(Base):
     __tablename__ = "workflow_logs"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    workflow_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    workflow_id: Mapped[int] = mapped_column(Integer, ForeignKey("workflows.id"), nullable=False, index=True)
     action: Mapped[str] = mapped_column(String(50), nullable=False)
-    operator_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    operator_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False)
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 

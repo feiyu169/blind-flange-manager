@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import DateTime, Integer, String, Text, func
+from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -40,10 +40,10 @@ class BlindFlangeStatusLog(Base):
     __tablename__ = "blind_flange_status_logs"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    blind_flange_id: Mapped[int] = mapped_column(Integer, index=True)
+    blind_flange_id: Mapped[int] = mapped_column(Integer, ForeignKey("blind_flanges.id"), nullable=False, index=True)
     old_status: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
     new_status: Mapped[str] = mapped_column(String(20), nullable=False)
-    operator_id: Mapped[int] = mapped_column(Integer)
+    operator_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False)
     reason: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
